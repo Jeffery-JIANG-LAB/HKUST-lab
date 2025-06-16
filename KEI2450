@@ -1,0 +1,35 @@
+#this is to control Keithley2450 to sweep voltage and read the current
+#connected by LAN
+
+from pymeasure.instruments.keithley import Keithley2450
+import time
+
+# Initialize the Keithley 2450 with the appropriate adapter (e.g., LAN)
+keithley = Keithley2450("TCPIP0::169.254.166.149::inst0::INSTR")  # Replace with your device's IP address
+
+# Setup to source voltage
+keithley.apply_voltage()                      # Set the instrument to source voltage
+keithley.source_voltage_range = 10            # Set the voltage range to 10 V
+keithley.compliance_current = 0.01            # Set compliance current to 10 mA
+keithley.source_voltage = 0                    # Start from 0 V
+keithley.enable_source()                       # Enable the voltage source
+
+# Setup to measure current
+keithley.measure_current()                     # Prepare to measure current
+
+# Perform a voltage sweep
+voltage_start = 0
+voltage_stop = 10
+voltage_step = 0.1
+
+try:
+    for voltage in range(int(voltage_start * 10), int(voltage_stop * 10) + 1, int(voltage_step * 10)):
+        keithley.source_voltage = voltage / 10.0  # Set the current voltage
+        keithley.ramp_to_voltage(keithley.source_voltage)  # Ramp to the set voltage
+        current = keithley.current                     # Read the current value
+        print(f"Voltage: {keithley.source_voltage} V, Current: {current} A")  # Print the current reading
+        time.sleep(0.5)                               # Wait for stabilization
+except KeyboardInterrupt:
+    print("Voltage sweep interrupted.")
+finally:
+    keithley.shutdown()                             # Ramps the current to 0 and disables output
