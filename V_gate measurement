@@ -1,0 +1,110 @@
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from pymeasure.instruments.keithley import Keithley2450
+from pymeasure.instruments.srs import SR830
+import os
+
+# Specify the directory where you want to save the files
+save_directory = r"C:\Users\user01\Desktop\Jeffry\Gate voltage test"  # Change this to your desired path
+
+# Ensure the directory exists
+if not os.path.exists(save_directory):
+    os.makedirs(save_directory)
+
+# Initialize the Keithley 2450
+keithley = Keithley2450("TCPIP0::169.254.244.136::inst0::INSTR")  # Replace with your device's IP address
+keithley.apply_voltage()                      # Set the instrument to source voltage
+keithley.source_voltage_range = 10            # Set the voltage range to 10 V
+keithley.compliance_current = 0.01            # Set compliance current to 10 mA
+keithley.source_voltage = 0                    # Start from 0 V
+keithley.enable_source()                       # Enable the voltage source
+
+# Initialize the SR830
+sr830 = SR830("GPIB0::21::INSTR")  # Replace with your actual address for SR830
+
+# Perform a voltage sweep
+voltage_start = 0
+voltage_stop = 10
+voltage_step = 0.1
+
+# Prepare the files for saving data
+csv_file_name = os.path.join(save_directory, "gate test 2450.csv")
+raw_data_file_name = os.path.join(save_directory, "raw_data.txt")
+
+# Prepare lists to store data for plotting
+applied_voltages = []
+sr830_x_values = []
+leakage_currents = []
+
+# Open files for writing
+with open(csv_file_name, 'a+') as f_csv, open(raw_data_file_name, 'a+') as f_raw:
+    # Write headers to CSV
+    f_csv.write("Applied_Voltage,SR830_X,SR830_Y,I_leakage,Magnitude\n")  # Header for CSV
+
+    try:
+        for voltage in range(int(voltage_start * 10), int(voltage_stop * 10) + 1, int(voltage_step * 10)):
+            applied_voltage = voltage / 10.0  # Set the current voltage
+            keithley.source_voltage = applied_voltage
+            keithley.ramp_to_voltage(keithley.source_voltage)  # Ramp to the set voltage
+            
+            # Allow time for the SR830 to stabilize
+            time.sleep(1)  # Wait for 1 second for stabilization
+            
+            # Read voltage from SR830
+            sr830_voltage_x = sr830.x  # Read X channel
+            sr830_voltage_y = sr830.y  # Read Y channel
+            
+            # Read current from Keithley 2450
+            leakage_current = keithley.current
+            
+            # Calculate magnitude
+            magnitude = np.sqrt(sr830_voltage_x**2 + sr830_voltage_y**2)
+            
+            # Store values for plotting
+            applied_voltages.append(applied_voltage)
+            sr830_x_values.append(sr830_voltage_x)
+            leakage_currents.append(leakage_current)
+            
+            # Print the readings
+            print(f"Applied Voltage: {applied_voltage} V, SR830 Voltage X: {sr830_voltage_x} V, Voltage Y: {sr830_voltage_y} V, Leakage Current: {leakage_current} A, Magnitude: {magnitude}")
+
+            # Write to CSV
+            f_csv.write(f"{applied_voltage},{sr830_voltage_x},{sr830_voltage_y},{leakage_current},{magnitude}\n")
+            
+            # Write raw data to text file
+            f_raw.write(f"Applied Voltage: {applied_voltage} V, SR830 Voltage X: {sr830_voltage_x} V, Y: {sr830_voltage_y} V, Leakage Current: {leakage_current} A, Magnitude: {magnitude}\n")
+            
+            time.sleep(0.5)  # Wait for stabilization before the next voltage step
+
+    except KeyboardInterrupt:
+        print("Voltage sweep interrupted.")
+
+    finally:
+        keithley.shutdown()  # Ramps the current to 0 and disables output
+
+# Plotting the data
+fig, ax1 = plt.subplots()
+
+# Plot SR830 X values
+ax1.set_xlabel('V_{gate} (Applied Voltage) [V]')
+ax1.set_ylabel('V_{sd} [V]', color='tab:blue')
+ax1.plot(applied_voltages, sr830_x_values, color='tab:blue', label='SR830_X', linestyle='-')
+ax1.scatter(applied_voltages, sr830_x_values, color='tab:blue')  # Add data points
+ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+# Create a second y-axis for the leakage current
+ax2 = ax1.twinx()
+ax2.set_ylabel('I_{leak} [A]', color='tab:red')
+ax2.plot(applied_voltages, leakage_currents, color='tab:red', label='Leakage Current', linestyle='--')
+ax2.scatter(applied_voltages, leakage_currents, color='tab:red')  # Add data points
+ax2.tick_params(axis='y', labelcolor='tab:red')
+
+# Title and legend
+plt.title('Voltage Sweep: SR830 X and Leakage Current')
+
+# Remove the grid
+# plt.grid()  # This line is omitted
+
+fig.tight_layout()  # To ensure the layout looks good
+plt.show()  # Display the plot
