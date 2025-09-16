@@ -1,0 +1,88 @@
+import time
+import numpy as np
+from pymeasure.instruments.keithley import Keithley2450
+from pymeasure.instruments.srs import SR830
+import os
+
+# Directory for saving files
+save_directory = r"C:\Users\user01\Desktop\Jeffry\WSe2\Device_24"
+os.makedirs(save_directory, exist_ok=True)
+
+# Initialize instruments with error handling
+keithley = None
+sr830_1 = None
+sr830_2 = None
+
+try:
+    keithley = Keithley2450("TCPIP0::169.254.27.175::inst0::INSTR")
+    keithley.timeout = 20000  # 设置超时为20秒
+    sr830_1 = SR830("GPIB0::21::INSTR")  # First SR830 for 2t voltage
+    sr830_1.timeout = 20000
+    sr830_2 = SR830("GPIB0::22::INSTR")  # Second SR830 for 4t voltage
+    sr830_2.timeout = 20000
+except Exception as e:
+    print(f"Error initializing instruments: {e}")
+    exit()
+
+# Configure Keithley
+keithley.apply_voltage()
+keithley.source_voltage_range = 10
+keithley.compliance_current = 0.01
+keithley.source_voltage = 0
+keithley.enable_source()
+
+# Voltage sweep parameters
+voltage_start = 0
+voltage_stop = -7.5
+voltage_step = -0.1
+
+# Prepare data files
+csv_file_name = os.path.join(save_directory, "gate_test_2450.csv")
+raw_data_file_name = os.path.join(save_directory, "gate dependence 200K.txt")
+
+# Data storage lists
+applied_voltages = []
+sr830_2t_values = []  # List to store 2t voltage readings
+sr830_4t_values = []  # List to store 4t voltage readings
+leakage_currents = []
+
+with open(csv_file_name, 'a+') as f_csv, open(raw_data_file_name, 'a+') as f_raw:
+    f_csv.write("Applied_Voltage,SR830_X,I_leakage,4t_Voltage\n")
+
+    try:
+        for voltage in np.arange(voltage_start, voltage_stop + voltage_step, voltage_step):
+            applied_voltage = voltage
+            keithley.source_voltage = applied_voltage
+            keithley.ramp_to_voltage(applied_voltage)  # 逐步增加电压
+            time.sleep(1)  # 等待仪器稳定
+
+            sr830_2t_voltage_x = sr830_1.x  # 读取第一台SR830的X通道（2t电压）
+            leakage_current = keithley.current  # 读取泄漏电流
+            sr830_4t_voltage = sr830_2.x  # 读取第二台SR830的X通道（4t电压）
+
+            # 存储数据
+            applied_voltages.append(applied_voltage)
+            sr830_2t_values.append(sr830_2t_voltage_x)
+            sr830_4t_values.append(sr830_4t_voltage)
+            leakage_currents.append(leakage_current)
+
+            # 打印读取的值
+            print(f"Applied Voltage: {applied_voltage} V, 2t Voltage: {sr830_2t_voltage_x} V, Leakage Current: {leakage_current} A, 4t Voltage: {sr830_4t_voltage} V")
+
+            # 写入CSV文件
+            f_csv.write(f"{applied_voltage:.2f},{sr830_2t_voltage_x:.2f},{leakage_current:.2f},{sr830_4t_voltage:.2f}\n")
+            # 写入原始数据文件
+            f_raw.write(f"{applied_voltage:.2f},{sr830_2t_voltage_x:.2f},{sr830_4t_voltage:.2f}\n")
+            
+            time.sleep(1)  # 等待以避免过快读取
+
+    except KeyboardInterrupt:
+        print("Voltage sweep interrupted.")
+
+    finally:
+        if keithley is not None:
+            keithley.shutdown()
+        if sr830_1 is not None:
+            sr830_1.shutdown()
+        if sr830_2 is not None:
+            sr830_2.shutdown()
