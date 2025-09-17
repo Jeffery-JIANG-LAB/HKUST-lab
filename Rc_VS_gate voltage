@@ -1,0 +1,35 @@
+% 文件路径
+filePath = 'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_200K_0V_-8v_.txt';
+
+% 读取数据
+data = load(filePath);
+
+% 提取数据列
+gateVoltage = data(:, 1);   % 第一列：gate voltage
+fourTV = data(:, 2);        % 第二列：4t voltage
+twoTV = data(:, 3);         % 第三列：2t voltage
+
+% 定义常数
+I = 5e-9; % 电流 5 nA
+L = 30e-6; % 长度 30 um
+
+% 计算导电率
+G_2pt = I ./ twoTV; % 2t 电压
+G_4pt = I ./ fourTV; % 4t 电压
+
+% 计算 Rc
+Rc = (L / 2) * (1 ./ G_2pt - 1 ./ G_4pt);
+
+% 创建图形
+figure;
+semilogy(gateVoltage, Rc, 'b-', 'LineWidth', 1.5); % R_c 随 gate voltage 的变化
+ylim([0.05 100])
+xlabel('Gate Voltage (V)');
+ylabel('R_c (\Omega)');
+grid on;
+
+% 设置标题
+title('R_c vs Gate Voltage');
+
+% 调整图形属性
+set(gca, 'FontSize', 12);
