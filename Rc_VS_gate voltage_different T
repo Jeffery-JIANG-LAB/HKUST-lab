@@ -1,0 +1,56 @@
+% 文件路径
+filePaths = {
+    'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_200K_0V_-8v_.txt',
+    'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_100K_0V_-8v_.txt',
+    'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_50K_0V_-8v_.txt',
+    'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_2K_0V_-8v_.txt'
+};
+
+% 定义常数
+I = 5e-9; % 电流 5 nA
+L = 30e-3; % 长度 30 um
+
+% 创建图形
+figure;
+
+
+% 定义颜色
+colors = ['b', 'r', 'g', 'm']; % 蓝色, 红色, 绿色, 品红色
+temperatureLabels = {'200K', '100K', '50K', '2K'};
+
+% 循环读取每个文件
+for idx = 1:length(filePaths)
+    % 读取数据
+    data = load(filePaths{idx});
+
+    % 提取数据列
+    gateVoltage = data(:, 1);   % 第一列：gate voltage
+    fourTV = data(:, 2);        % 第二列：4t voltage
+    twoTV = data(:, 3);         % 第三列：2t voltage
+
+    % 计算导电率
+    G_2pt = I ./ twoTV; % 2t 电压
+    G_4pt = I ./ fourTV; % 4t 电压
+
+    % 计算 Rc
+    Rc = (L / 2) * (1 ./ G_2pt - 1 ./ G_4pt);
+
+    % 绘制 R_c 曲线
+    semilogy(gateVoltage, Rc, colors(idx), 'LineWidth', 1.5, 'DisplayName', temperatureLabels{idx});
+    hold on;
+end
+
+% 设置 y 轴范围
+ylim([50 40000]); % y 轴范围调整为 10 到 10000
+xlabel('Gate Voltage (V)');
+ylabel('R_c (kΩ·μm)');
+grid on;
+
+% 设置标题和图例
+title('R_c vs Gate Voltage');
+legend('show'); % 自动显示图例
+
+% 调整图形属性
+set(gca, 'FontSize', 12);
+
+hold off;
