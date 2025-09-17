@@ -1,0 +1,41 @@
+% 文件路径
+filePath = 'C:\Users\Jefferry\Desktop\HKUST\lab\WSe2\test device 24\Device_24_5nA_200K_0V_-8v_.txt';
+
+% 读取数据
+data = load(filePath);
+
+% 提取数据列
+gateVoltage = data(:, 1);   % 第一列：gate voltage
+fourTV = data(:, 3);        % 第二列：4t voltage
+twoTV = data(:, 2);         % 第三列：2t voltage
+
+% 打印数据范围以便调试
+disp(['4t Voltage Range: ', num2str(min(fourTV)), ' to ', num2str(max(fourTV))]);
+disp(['2t Voltage Range: ', num2str(min(twoTV)), ' to ', num2str(max(twoTV))]);
+
+% 创建图形
+figure;
+% 绘制左侧纵坐标的曲线
+semilogy(gateVoltage, fourTV, 'b-', 'LineWidth', 1.5); % 4t Voltage
+hold on;
+semilogy(gateVoltage, twoTV, 'r-', 'LineWidth', 1.5);  % 2t Voltage
+hold off;
+
+% 设置坐标轴和标签
+xlabel('Gate Voltage (V)');
+ylabel('Voltage (V)');
+grid on;
+
+% 动态设置 y 轴范围
+yMin = 0; % 最小值设为0
+yMax = max(max(fourTV), max(twoTV)); % 最大值根据数据动态设置
+ylim([yMin, yMax]);
+
+% 设置图例
+legend('4t Voltage', '2t Voltage');
+
+% 设置标题
+title('Gate Voltage vs 4t Voltage and 2t Voltage');
+
+% 调整图形属性
+set(gca, 'FontSize', 12);
