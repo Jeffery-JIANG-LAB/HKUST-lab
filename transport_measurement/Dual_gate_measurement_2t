@@ -1,0 +1,123 @@
+import time
+import os
+from pymeasure.instruments.keithley import Keithley2450
+from pymeasure.instruments.srs import SR830
+
+# Specify the directory where you want to save the files
+save_directory = r"C:\Users\user01\Desktop\Jeffry\Gate voltage test"  # Change this to your desired path
+
+# Ensure the directory exists
+if not os.path.exists(save_directory):
+    os.makedirs(save_directory)
+
+# Initialize the Keithley 2450 for TOP GATE
+top_gate = Keithley2450("GPIB0::11::INSTR")  
+top_gate.timeout =60000  # Set timeout to 25 seconds (25000 ms)
+top_gate.apply_voltage()                      # Set the instrument to source voltage
+top_gate.source_voltage_range = 10            # Set the voltage range to 10 V
+top_gate.compliance_current = 0.01            # Set compliance current to 10 mA
+top_gate.source_voltage = 0                   # Start from 0 V
+top_gate.enable_source()                      # Enable the voltage source
+
+# Initialize the Keithley 2450 for BACK GATE
+back_gate = Keithley2450("GPIB0::20::INSTR")  # Replace with your actual address for back gate
+back_gate.timeout = 60000  # Set timeout to 25 seconds (25000 ms)
+back_gate.apply_voltage()                     # Set the instrument to source voltage
+back_gate.source_voltage_range = 10           # Set the voltage range to 10 V
+back_gate.compliance_current = 0.01           # Set compliance current to 10 mA
+back_gate.source_voltage = 0                  # Start from 0 V
+back_gate.enable_source()                     # Enable the voltage source
+
+# Initialize the SR830
+sr830 = SR830("GPIB0::23::INSTR")  # Replace with your actual address for SR830
+sr830.timeout = 60000  # Set timeout to 25 seconds (25000 ms)
+
+# Configuration for voltage sweep
+fixed_voltage = 3  # Fixed voltage for one gate (can be changed)
+sweep_voltage_start = 0
+sweep_voltage_stop = 10
+sweep_voltage_step = 0.1
+
+# Choose which gate to sweep and which to fix
+sweep_top_gate = True  # Set to False to sweep back gate instead
+
+# Prepare the files for saving data
+if sweep_top_gate:
+    csv_file_name = os.path.join(save_directory, "top_gate_sweep_back_gate_fixed.csv")
+else:
+    csv_file_name = os.path.join(save_directory, "back_gate_sweep_top_gate_fixed.csv")
+
+# Open file for writing
+with open(csv_file_name, 'a+') as f_csv:
+    # Write headers to CSV
+    if sweep_top_gate:
+        f_csv.write("Top_Gate_Voltage,Back_Gate_Voltage,SR830_X,I_leakage_top,I_leakage_back\n")
+    else:
+        f_csv.write("Back_Gate_Voltage,Top_Gate_Voltage,SR830_X,I_leakage_back,I_leakage_top\n")
+
+    # Set fixed voltage
+    if sweep_top_gate:
+        back_gate.source_voltage = fixed_voltage
+        back_gate.ramp_to_voltage(back_gate.source_voltage)
+        print(f"Back gate fixed at {fixed_voltage} V, sweeping top gate...")
+    else:
+        top_gate.source_voltage = fixed_voltage
+        top_gate.ramp_to_voltage(top_gate.source_voltage)
+        print(f"Top gate fixed at {fixed_voltage} V, sweeping back gate...")
+
+    try:
+        for voltage in range(int(sweep_voltage_start * 10), int(sweep_voltage_stop * 10) + 1, int(sweep_voltage_step * 10)):
+            sweep_voltage = voltage / 10.0  # Set the current sweep voltage
+            
+            # Set the sweep voltage to the appropriate gate
+            if sweep_top_gate:
+                top_gate.source_voltage = sweep_voltage
+                top_gate.ramp_to_voltage(top_gate.source_voltage)
+            else:
+                back_gate.source_voltage = sweep_voltage
+                back_gate.ramp_to_voltage(back_gate.source_voltage)
+            
+            # Allow time for stabilization
+            time.sleep(1)  # Wait for 1 second for stabilization
+            
+            # Read voltage from SR830 (only X channel)
+            sr830_voltage_x = sr830.x
+            
+            # Read current from both Keithley 2450s
+            leakage_current_top = top_gate.current
+            leakage_current_back = back_gate.current
+            
+            # Print the readings
+            if sweep_top_gate:
+                print(f"Top Gate Voltage: {sweep_voltage} V, Back Gate Voltage: {fixed_voltage} V, SR830 X: {sr830_voltage_x} V, Leakage Current Top: {leakage_current_top} A, Leakage Current Back: {leakage_current_back} A")
+            else:
+                print(f"Back Gate Voltage: {sweep_voltage} V, Top Gate Voltage: {fixed_voltage} V, SR830 X: {sr830_voltage_x} V, Leakage Current Back: {leakage_current_back} A, Leakage Current Top: {leakage_current_top} A")
+
+            # Write to CSV
+            if sweep_top_gate:
+                f_csv.write(f"{sweep_voltage},{fixed_voltage},{sr830_voltage_x},{leakage_current_top},{leakage_current_back}\n")
+            else:
+                f_csv.write(f"{sweep_voltage},{fixed_voltage},{sr830_voltage_x},{leakage_current_back},{leakage_current_top}\n")
+            
+            # Ensure data is written to disk immediately
+            f_csv.flush()
+            
+            time.sleep(0.5)  # Wait before the next voltage step
+
+    except KeyboardInterrupt:
+        print("Voltage sweep interrupted.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        print("Attempting to shutdown instruments safely...")
+
+    finally:
+        # Shutdown both Keithleys
+        try:
+            top_gate.shutdown()  # Ramps the voltage to 0 and disables output
+            back_gate.shutdown()  # Ramps the voltage to 0 and disables output
+            print("Instruments shutdown successfully.")
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
+
+print("Measurement completed successfully!")
