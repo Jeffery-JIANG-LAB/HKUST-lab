@@ -1,0 +1,119 @@
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from pymeasure.instruments.keithley import Keithley2450
+from pymeasure.instruments.srs import SR830
+import os
+# Specify the directory where you want to save the files
+save_directory = r"C:\Users\user01\Desktop\Jeffry\Gate voltage test"  # Change this to your desired path
+# Ensure the directory exists
+if not os.path.exists(save_directory):
+    os.makedirs(save_directory)
+    
+# Initialize the SR830
+sr830 = SR830("GPIB0::21::INSTR")  # Replace with your actual address for SR830
+    
+# Initialize the Keithley 2450 (top gate)
+keithley_top = Keithley2450("TCPIP0::169.254.244.136::inst0::INSTR")  # Replace with your device's IP address
+keithley_top.apply_voltage()                      # Set the instrument to source voltage
+keithley_top.source_voltage_range = 10            # Set the voltage range to 10 V
+keithley_top.compliance_current = 0.01            # Set compliance current to 10 mA
+keithley_top.source_voltage = 0                    # Start from 0 V
+keithley_top.enable_source()
+
+# Perform a voltage sweep (top gate)
+voltage_start_top = 0
+voltage_stop_top = 10
+voltage_step_top = 0.1
+
+# Initialize the Keithley 2450 (back gate)
+keithley_back = Keithley2450("TCPIP0::169.254.244.136::inst0::INSTR")  # Replace with your device's IP address
+keithley_back.apply_voltage()                      # Set the instrument to source voltage
+keithley_back.source_voltage_range = 10            # Set the voltage range to 10 V
+keithley_back.compliance_current = 0.01            # Set compliance current to 10 mA
+keithley_back.source_voltage = 0                    # Start from 0 V
+keithley_back.enable_source()
+
+# Perform a voltage sweep (back gate)
+voltage_start_back = 0
+voltage_stop_back = 10
+voltage_step_back = 0.1
+
+#Create arrays storing V_tg and V_bg
+V_tg = [voltage / 10.0 for voltage in range(int(voltage_start_top * 10), int(voltage_stop_top * 10) + 1, int(voltage_step_top * 10)) ]
+V_bg = [voltage / 10.0 for voltage in range(int(voltage_start_back * 10), int(voltage_stop_back * 10) + 1, int(voltage_step_back * 10)) ]
+
+#Create Matrix storing data
+data_matrix = np.zeros((len(V_tg), len(V_bg), 7), dtype = np.float64)
+
+#Store V_tg and V_bg in the matrix
+for i in range(len(V_tg)):
+    for j in range(len(V_bg)):
+        data_matrix[i][j][0] = V_tg[i]
+        data_matrix[i][j][1] = V_bg[j]
+
+#save the first trial
+filename = os.path.join(save_directory, "gate test 2450.csv")
+current_save = data_matrix.reshape(-1, 7)  # (len(V_tg)*len(V_bg), 7)
+np.savetxt(
+    filename,
+    current_save,                      # shape (len(V_tg)*len(V_bg), 7)
+    delimiter=",",
+    fmt="%.6g",
+    header="V_tg,V_bg,V_x,V_y,I_leak_top,I_leak_back,Magnitude",
+    comments=""
+)
+
+#Start measurement
+try:
+    for i in range(len(V_tg)):
+        v_t = V_tg[i]
+        #Set top gate voltage
+        applied_voltage_top = v_t  # Set the current voltage
+        keithley_top.source_voltage = applied_voltage_top
+        keithley_top.ramp_to_voltage(keithley_top.source_voltage)  # Ramp to the set voltage
+        # Allow time for the SR830 to stabilize
+        time.sleep(1)  # Wait for 1 second for stabilization
+        for j in range (len(V_bg)):
+            v_b = V_bg[j]
+            #Set back gate voltage
+            applied_voltage_back = v_b  # Set the current voltage
+            keithley_back.source_voltage = applied_voltage_back
+            keithley_back.ramp_to_voltage(keithley_back.source_voltage)  # Ramp to the set voltage
+            # Allow time for the SR830 to stabilize
+            time.sleep(1)  # Wait for 1 second for stabilization
+            # Read voltage from SR830
+            sr830_voltage_x = sr830.x  # Read X channel
+            sr830_voltage_y = sr830.y  # Read Y channel
+            # Read current from Keithley 2450 top gate
+            I_top = keithley_top.current
+            # Read current from Keithley 2450 back gate
+            I_back = keithley_back.current
+            # Calculate magnitude
+            magnitude = np.sqrt(sr830_voltage_x**2 + sr830_voltage_y**2)
+            print(f"V_tg: {applied_voltage_top} V, V_bg: {applied_voltage_back} V, SR830 Voltage X: {sr830_voltage_x} V, Voltage Y: {sr830_voltage_y} V, Current_top: {I_top} A, Current_back: {I_back} A, Magnitude: {magnitude}")
+            #Store into matrix
+            data_matrix[i, j, 2:7] = (
+                sr830_voltage_x,
+                sr830_voltage_y,
+                I_top,
+                I_back,
+                magnitude,
+                )
+            #Save current matrix into csv file
+            current_save = data_matrix.reshape(-1, 7)  # (len(V_tg)*len(V_bg), 7)
+            np.savetxt(
+                filename,
+                current_save,                      # shape (len(V_tg)*len(V_bg), 7)
+                delimiter=",",
+                fmt="%.6g",
+                header="V_tg,V_bg,V_x,V_y,I_leak_top,I_leak_back,Magnitude",
+                comments=""
+            )
+            time.sleep(0.5)  # Wait for stabilization before the next voltage step
+except KeyboardInterrupt:
+    print("Voltage sweep interrupted.")
+finally:
+    keithley_top.shutdown()  # Ramps the current to 0 and disables output
+    keithley_back.shutdown()  # Ramps the current to 0 and disables output
+ 
